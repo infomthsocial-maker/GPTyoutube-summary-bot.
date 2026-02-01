@@ -4,7 +4,8 @@ import requests
 import feedparser
 from bs4 import BeautifulSoup
 
-# CONFIG
+# ---------- CONFIG ----------
+
 RSS_URL = "https://www.youtube.com/feeds/videos.xml?channel_id=UCrvchO1h6lWZAuGaa1LqX9Q"
 STATE_FILE = "state.json"
 
@@ -12,7 +13,7 @@ TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 GROQ_API_KEY = os.environ["GROQ_API_KEY"]
 
-# ---------- helpers ----------
+# ---------- HELPERS ----------
 
 def load_state():
     with open(STATE_FILE, "r") as f:
@@ -59,10 +60,12 @@ def summarize_with_groq(text):
             {
                 "role": "user",
                 "content": (
-                    "Summarize this YouTube video transcript as:\n"
-                    "- 5 bullet points\n"
-                    "- TL;DR\n"
-                    "- Key takeaway\n\n"
+                    "From the following YouTube transcript, extract exactly 4 concise key points.\n"
+                    "Rules:\n"
+                    "- Each point must be one sentence\n"
+                    "- No intro, no conclusion\n"
+                    "- No numbering\n"
+                    "- No emojis\n\n"
                     f"{text}"
                 )
             }
@@ -77,9 +80,9 @@ def summarize_with_groq(text):
     )
     r.raise_for_status()
 
-    return r.json()["choices"][0]["message"]["content"]
+    return r.json()["choices"][0]["message"]["content"].strip()
 
-# ---------- main ----------
+# ---------- MAIN ----------
 
 def main():
     state = load_state()
@@ -101,19 +104,30 @@ def main():
         transcript = fetch_transcript(video_url)
         summary = summarize_with_groq(transcript)
 
+        # Format Telegram message
+        points = summary.split("\n")
+        icons = ["💡", "🔥", "⚡", "🎯"]
+        formatted_points = "\n".join(
+            f"{icons[i]} {points[i].strip()}"
+            for i in range(min(4, len(points)))
+        )
+
         message = (
-            f"📺 *New YouTube Video*\n\n"
-            f"*{title}*\n\n"
-            f"{summary}\n\n"
-            f"[Watch video]({video_url})"
+            f"🎬 *{title}*\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"{formatted_points}\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🔗 [Watch Video]({video_url})\n\n"
+            f"#TechChannel"
         )
 
     except Exception as e:
+        # Fallback message if transcript fails
         message = (
             f"⚠️ New video detected:\n\n"
             f"*{title}*\n\n"
             f"Transcript could not be fetched.\n"
-            f"[Watch video]({video_url})"
+            f"🔗 [Watch Video]({video_url})"
         )
 
     send_telegram(message)
